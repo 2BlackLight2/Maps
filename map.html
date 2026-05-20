@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Координаты на карте</title>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+    }
+    #app {
+      display: flex;
+      height: 100%;
+      position: relative;
+    }
+    /* Панель управления */
+    .sidebar {
+      width: 360px;
+      background: rgba(255, 255, 255, 0.97);
+      box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 15px;
+      gap: 15px;
+      transition: transform 0.3s ease;
+      flex-shrink: 0;
+    }
+    .sidebar.collapsed {
+      transform: translateX(-100%);
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+    }
+    .toggle-btn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1100;
+      background: white;
+      border: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 18px;
+      cursor: pointer;
+      display: none;
+    }
+    /* Карта */
+    #map {
+      flex: 1;
+      height: 100%;
+    }
+    /* Форма */
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .input-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .input-row label {
+      width: 80px;
+      font-weight: 500;
+    }
+    .input-row input {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .btn-primary {
+      background: #1976d2;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #1565c0;
+    }
+    .btn-success {
+      background: #2e7d32;
+      color: white;
+    }
+    .btn-success:hover {
+      background: #1b5e20;
+    }
+    .btn-warning {
+      background: #f57c00;
+      color: white;
+    }
+    .btn-warning:hover {
+      background: #e65100;
+    }
+    .btn-danger {
+      background: #c62828;
+      color: white;
+    }
+    .btn-danger:hover {
+      background: #b71c1c;
+    }
+    .btn-outline {
+      background: white;
+      border: 1px solid #1976d2;
+      color: #1976d2;
+    }
+    .btn-outline:hover {
+      background: #e3f2fd;
+    }
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    /* Таблица расстояний */
+    .distance-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+    .distance-table th, .distance-table td {
+      border: 1px solid #ddd;
+      padding: 6px;
+      text-align: center;
+    }
+    .distance-table th {
+      background: #f5f5f5;
+      font-weight: 600;
+    }
+    .close-point {
+      background-color: #ffebee;
+      color: #b71c1c;
+      font-weight: bold;
+    }
+    .warning-box {
+      background: #ffebee;
+      border-left: 4px solid #c62828;
+      padding: 10px;
+      border-radius: 4px;
+      color: #b71c1c;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hidden {
+      display: none;
+    }
+    .select-pair {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .select-pair select {
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    /* Адаптация для мобильных */
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 300px;
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+      }
+      .sidebar.collapsed {
+        transform: translateX(-100%);
+      }
+      .toggle-btn {
+        display: block;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Кнопка для мобильного меню -->
+    <button class="toggle-btn" id="toggleSidebar">☰</button>
+
+    <!-- Боковая панель -->
+    <div class="sidebar" id="sidebar">
+      <h2>📍 Точки и расстояния</h2>
+
+      <!-- Форма ввода -->
+      <div class="input-group">
+        <div class="input-row">
+          <label>Широта:</label>
+          <input type="number" id="latInput" step="any" placeholder="59.9343" value="59.9343">
+        </div>
+        <div class="input-row">
+          <label>Долгота:</label>
+          <input type="number" id="lngInput" step="any" placeholder="30.3351" value="30.3351">
+        </div>
+        <button class="btn btn-primary" id="addPointBtn">➕ Добавить точку</button>
+      </div>
+
+      <!-- Кнопки управления сохранением -->
+      <div class="button-row">
+        <button class="btn btn-outline" id="saveBtn">💾 Сохранить</button>
+        <button class="btn btn-outline" id="loadBtn">📂 Загрузить</button>
+        <button class="btn btn-danger" id="clearBtn">🗑 Очистить всё</button>
+      </div>
+
+      <!-- Предупреждение о близких точках -->
+      <div id="warningContainer" class="warning-box hidden">
+        ⚠️ Обнаружены точки на расстоянии менее 25 м!
+      </div>
+
+      <!-- Выбор двух точек для отображения расстояния -->
+      <div class="select-pair">
+        <select id="pointASelect"><option value="">Точка А</option></select>
+        <select id="pointBSelect"><option value="">Точка Б</option></select>
+        <button class="btn btn-outline" id="calcDistanceBtn">📏 Показать расстояние</button>
+        <span id="pairDistanceResult" style="font-weight:bold; margin-left:5px;"></span>
+      </div>
+
+      <!-- Таблица всех попарных расстояний -->
+      <div style="overflow-x:auto;">
+        <table class="distance-table" id="distanceTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <small style="color:#666;">Красная ячейка – расстояние < 25 м</small>
+    </div>
+
+    <!-- Карта -->
+    <div id="map"></div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    (function() {
+      // ---------- Хранилище точек ----------
+      const STORAGE_KEY = 'map_points_data';
+      let points = []; // Массив объектов { id, lat, lng }
+
+      // ---------- Карта ----------
+      const map = L.map('map').setView([59.9343, 30.3351], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      // Группа маркеров
+      const markerGroup = L.layerGroup().addTo(map);
+
+      // ---------- Вспомогательные функции ----------
+      function generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+      }
+
+      // Гаверсинус (расстояние в метрах)
+      function haversineDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000; // Радиус Земли в метрах
+        const toRad = (deg) => deg * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat/2) ** 2 +
+                  Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                  Math.sin(dLon/2) ** 2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+      }
+
+      // Поиск пар с расстоянием < 25 м
+      function findClosePairs(pts, threshold = 25) {
+        const pairs = [];
+        for (let i = 0; i < pts.length; i++) {
+          for (let j = i + 1; j < pts.length; j++) {
+            const dist = haversineDistance(pts[i].lat, pts[i].lng, pts[j].lat, pts[j].lng);
+            if (dist < threshold) {
+              pairs.push({ i, j, dist });
+            }
+          }
+        }
+        return pairs;
+      }
+
+      // Обновление маркеров на карте (синие – обычные, красные – близкие)
+      function updateMarkers(closeIndices) {
+        markerGroup.clearLayers();
+        const closeSet = new Set(closeIndices);
+        points.forEach((p, idx) => {
+          const color = closeSet.has(idx) ? 'red' : '#1976d2';
+          const marker = L.circleMarker([p.lat, p.lng], {
+            radius: 8,
+            fillColor: color,
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.9
+          }).addTo(markerGroup);
+          marker.bindPopup(`Точка ${idx+1}<br>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`);
+        });
+      }
+
+      // Заполнение выпадающих списков
+      function populateSelects() {
+        const selectA = document.getElementById('pointASelect');
+        const selectB = document.getElementById('pointBSelect');
+        selectA.innerHTML = '<option value="">Точка А</option>';
+        selectB.innerHTML = '<option value="">Точка Б</option>';
+        points.forEach((p, idx) => {
+          const option = document.createElement('option');
+          option.value = idx;
+          option.textContent = `Точка ${idx+1} (${p.lat.toFixed(4)}, ${p.lng.toFixed(4)})`;
+          selectA.appendChild(option.cloneNode(true));
+          selectB.appendChild(option);
+        });
+      }
+
+      // Обновление таблицы расстояний
+      function updateDistanceTable(closePairs) {
+        const table = document.getElementById('distanceTable');
+        const thead = table.querySelector('thead');
+        const tbody = table.querySelector('tbody');
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+
+        if (points.length === 0) {
+          thead.innerHTML = '<tr><th>Нет точек</th></tr>';
+          return;
+        }
+
+        // Заголовок
+        let headerRow = '<tr><th>Точка</th>';
+        points.forEach((_, i) => {
+          headerRow += `<th>${i+1}</th>`;
+        });
+        headerRow += '</tr>';
+        thead.innerHTML = headerRow;
+
+        // Строки
+        for (let i = 0; i < points.length; i++) {
+          let row = `<td><strong>${i+1}</strong></td>`;
+          for (let j = 0; j < points.length; j++) {
+            if (i === j) {
+              row += '<td>—</td>';
+            } else {
+              const dist = haversineDistance(points[i].lat, points[i].lng, points[j].lat, points[j].lng);
+              const isClose = closePairs.some(pair =>
+                (pair.i === i && pair.j === j) || (pair.i === j && pair.j === i)
+              );
+              const cellClass = isClose ? 'class="close-point"' : '';
+              row += `<td ${cellClass}>${dist.toFixed(1)} м</td>`;
+            }
+          }
+          tbody.innerHTML += `<tr>${row}</tr>`;
+        }
+      }
+
+      // Отображение предупреждения
+      function updateWarning(closePairs) {
+        const warningDiv = document.getElementById('warningContainer');
+        if (closePairs.length > 0) {
+          warningDiv.classList.remove('hidden');
+          warningDiv.innerHTML = `⚠️ Обнаружены точки на расстоянии менее 25 м! (${closePairs.length} пар)`;
+        } else {
+          warningDiv.classList.add('hidden');
+        }
+      }
+
+      // Полное обновление UI
+      function refreshUI() {
+        const closePairs = findClosePairs(points);
+        const closeIndices = closePairs.flatMap(p => [p.i, p.j]);
+
+        updateMarkers(closeIndices);
+        populateSelects();
+        updateDistanceTable(closePairs);
+        updateWarning(closePairs);
+        document.getElementById('pairDistanceResult').textContent = '';
+      }
+
+      // Сохранение в localStorage
+      function saveToStorage() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(points));
+        alert('Точки сохранены в памяти браузера.');
+      }
+
+      function loadFromStorage() {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          try {
+            points = JSON.parse(raw);
+            refreshUI();
+            if (points.length > 0) {
+              const last = points[points.length-1];
+              map.setView([last.lat, last.lng], 14);
+            }
+            alert('Точки загружены.');
+          } catch (e) {
+            alert('Ошибка загрузки данных.');
+          }
+        } else {
+          alert('Сохранённых точек не найдено.');
+        }
+      }
+
+      function clearAll() {
+        if (confirm('Удалить все точки?')) {
+          points = [];
+          markerGroup.clearLayers();
+          refreshUI();
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+
+      // Добавление точки
+      function addPoint() {
+        const latInput = document.getElementById('latInput');
+        const lngInput = document.getElementById('lngInput');
+        const lat = parseFloat(latInput.value);
+        const lng = parseFloat(lngInput.value);
+
+        if (isNaN(lat) || isNaN(lng)) {
+          alert('Введите корректные координаты.');
+          return;
+        }
+        if (lat < -90 || lat > 90) {
+          alert('Широта должна быть от -90 до 90.');
+          return;
+        }
+        if (lng < -180 || lng > 180) {
+          alert('Долгота должна быть от -180 до 180.');
+          return;
+        }
+
+        points.push({ id: generateId(), lat, lng });
+        refreshUI();
+        map.setView([lat, lng], map.getZoom());
+        // Очистка полей (опционально)
+        latInput.value = '';
+        lngInput.value = '';
+      }
+
+      // Показать расстояние между выбранными точками
+      function showPairDistance() {
+        const idxA = document.getElementById('pointASelect').value;
+        const idxB = document.getElementById('pointBSelect').value;
+        const resultSpan = document.getElementById('pairDistanceResult');
+        if (idxA === '' || idxB === '') {
+          resultSpan.textContent = 'Выберите обе точки.';
+          return;
+        }
+        if (idxA === idxB) {
+          resultSpan.textContent = 'Выбрана одна и та же точка.';
+          return;
+        }
+        const a = points[parseInt(idxA)];
+        const b = points[parseInt(idxB)];
+        const dist = haversineDistance(a.lat, a.lng, b.lat, b.lng);
+        resultSpan.textContent = `${dist.toFixed(2)} м`;
+      }
+
+      // Автозагрузка при старте
+      function autoLoad() {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          try {
+            points = JSON.parse(raw);
+            refreshUI();
+          } catch (e) {}
+        }
+      }
+
+      // ---------- Привязка событий ----------
+      document.getElementById('addPointBtn').addEventListener('click', addPoint);
+      document.getElementById('saveBtn').addEventListener('click', saveToStorage);
+      document.getElementById('loadBtn').addEventListener('click', loadFromStorage);
+      document.getElementById('clearBtn').addEventListener('click', clearAll);
+      document.getElementById('calcDistanceBtn').addEventListener('click', showPairDistance);
+
+      // Мобильное меню
+      const sidebar = document.getElementById('sidebar');
+      const toggleBtn = document.getElementById('toggleSidebar');
+      toggleBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('collapsed');
+        toggleBtn.textContent = sidebar.classList.contains('collapsed') ? '☰' : '✕';
+        // Перерисовка карты при изменении размера контейнера
+        setTimeout(() => map.invalidateSize(), 300);
+      });
+
+      // Старт
+      autoLoad();
+    })();
+  </script>
+</body>
+</html>
